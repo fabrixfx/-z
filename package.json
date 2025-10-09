@@ -1,7 +1,7 @@
 {
-  "name": "messenger",
+  "name": "messenger_ui",
   "version": "1.0.0",
-  "description": "Простой мессенджер с регистрацией и перепиской",
+  "description": "Красивый мессенджер с чатами и WebSocket",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

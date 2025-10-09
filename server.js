@@ -12,12 +12,19 @@ const db = new sqlite3.Database('chat.db');
 
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT)`);
-  db.run(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, from_user TEXT, to_user TEXT, message TEXT)`);
+  db.run(`CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY, 
+      from_user TEXT, 
+      to_user TEXT, 
+      message TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
 });
 
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
+// Регистрация
 app.post('/register', async (req, res) => {
   const { username, password } = req.body;
   if(!username || !password) return res.status(400).json({ error: 'Логин и пароль обязательны' });
@@ -28,14 +35,32 @@ app.post('/register', async (req, res) => {
   });
 });
 
+// Вход
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
   db.get(`SELECT * FROM users WHERE username = ?`, [username], async (err, row) => {
     if(!row) return res.status(400).json({ error: 'Пользователь не найден' });
     const valid = await bcrypt.compare(password, row.password);
     if(!valid) return res.status(400).json({ error: 'Неверный пароль' });
-    res.json({ success: true, username });
+    // Получаем список всех пользователей
+    db.all(`SELECT username FROM users WHERE username != ?`, [username], (err2, users) => {
+      res.json({ success: true, username, users: users.map(u => u.username) });
+    });
   });
+});
+
+// История сообщений между двумя пользователями
+app.get('/messages/:user1/:user2', (req, res) => {
+  const { user1, user2 } = req.params;
+  db.all(
+    `SELECT * FROM messages 
+     WHERE (from_user=? AND to_user=?) OR (from_user=? AND to_user=?) 
+     ORDER BY timestamp ASC`,
+     [user1, user2, user2, user1],
+     (err, rows) => {
+       res.json(rows);
+     }
+  );
 });
 
 let clients = {};

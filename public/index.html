@@ -4,39 +4,57 @@
 <meta charset="UTF-8">
 <title>Мессенджер</title>
 <style>
-  body { font-family: Arial; }
-  #register, #login, #chat { margin: 20px; }
-  #chat { display: none; }
-  #messages { height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 5px; margin-bottom: 5px; }
+body { font-family: Arial; margin: 0; background: #f5f5f5; }
+header { background: #4a76a8; color: #fff; padding: 15px; text-align: center; font-size: 1.5em; }
+#container { display: flex; height: calc(100vh - 60px); }
+#users { width: 200px; background: #fff; border-right: 1px solid #ccc; overflow-y: auto; }
+#users div { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; }
+#users div:hover { background: #f0f0f0; }
+#chat { flex: 1; display: flex; flex-direction: column; }
+#messages { flex: 1; padding: 10px; overflow-y: auto; }
+.message { margin: 5px 0; padding: 8px 12px; border-radius: 12px; display: inline-block; max-width: 60%; }
+.from-me { background: #4a76a8; color: #fff; align-self: flex-end; }
+.from-them { background: #e5e5ea; color: #000; align-self: flex-start; }
+#input-container { display: flex; padding: 10px; background: #fff; border-top: 1px solid #ccc; }
+#msgInput { flex: 1; padding: 10px; border-radius: 20px; border: 1px solid #ccc; margin-right: 10px; }
+#sendBtn { padding: 10px 20px; border: none; border-radius: 20px; background: #4a76a8; color: #fff; cursor: pointer; }
+#register, #login { padding: 20px; }
 </style>
 </head>
 <body>
 
+<header>Мессенджер</header>
+
 <div id="register">
   <h2>Регистрация</h2>
-  <input id="regUser" placeholder="Логин">
-  <input id="regPass" type="password" placeholder="Пароль">
+  <input id="regUser" placeholder="Логин"><br><br>
+  <input id="regPass" type="password" placeholder="Пароль"><br><br>
   <button onclick="register()">Зарегистрироваться</button>
 </div>
 
 <div id="login" style="display:none">
   <h2>Вход</h2>
-  <input id="loginUser" placeholder="Логин">
-  <input id="loginPass" type="password" placeholder="Пароль">
+  <input id="loginUser" placeholder="Логин"><br><br>
+  <input id="loginPass" type="password" placeholder="Пароль"><br><br>
   <button onclick="login()">Войти</button>
 </div>
 
-<div id="chat">
-  <h2>Чат</h2>
-  <input id="toUser" placeholder="Кому">
-  <div id="messages"></div>
-  <input id="msgInput" placeholder="Сообщение">
-  <button onclick="sendMessage()">Отправить</button>
+<div id="container" style="display:none">
+  <div id="users"></div>
+  <div id="chat">
+    <div id="messages"></div>
+    <div id="input-container">
+      <input id="msgInput" placeholder="Введите сообщение">
+      <button id="sendBtn" onclick="sendMessage()">Отправить</button>
+    </div>
+  </div>
 </div>
 
 <script>
 let ws;
 let username;
+let currentChat = null;
+let users = [];
 
 function register() {
   fetch('/register', {
@@ -62,15 +80,15 @@ function login() {
   }).then(r => r.json()).then(res => {
     if(res.success) {
       username = res.username;
+      users = res.users;
       document.getElementById('login').style.display='none';
-      document.getElementById('chat').style.display='block';
+      document.getElementById('container').style.display='flex';
+      renderUsers();
       ws = new WebSocket(`wss://${location.host}`);
       ws.onopen = () => ws.send(JSON.stringify({ type:'login', username }));
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        const div = document.createElement('div');
-        div.textContent = `${data.from}: ${data.message}`;
-        document.getElementById('messages').appendChild(div);
+        if(currentChat === data.from) addMessage(data.from, data.message, false);
       };
     } else {
       alert(res.error);
@@ -78,13 +96,40 @@ function login() {
   });
 }
 
-function sendMessage() {
-  const to = document.getElementById('toUser').value;
-  const message = document.getElementById('msgInput').value;
-  ws.send(JSON.stringify({ type:'message', from: username, to, message }));
+function renderUsers() {
+  const usersDiv = document.getElementById('users');
+  usersDiv.innerHTML = '';
+  users.forEach(u => {
+    const div = document.createElement('div');
+    div.textContent = u;
+    div.onclick = () => openChat(u);
+    usersDiv.appendChild(div);
+  });
+}
+
+function openChat(user) {
+  currentChat = user;
+  const messagesDiv = document.getElementById('messages');
+  messagesDiv.innerHTML = '';
+  fetch(`/messages/${username}/${user}`).then(r => r.json()).then(msgs => {
+    msgs.forEach(m => addMessage(m.from_user, m.message, m.from_user===username));
+  });
+}
+
+function addMessage(from, message, isMe) {
+  const messagesDiv = document.getElementById('messages');
   const div = document.createElement('div');
-  div.textContent = `Я: ${message}`;
-  document.getElementById('messages').appendChild(div);
+  div.className = 'message ' + (isMe ? 'from-me' : 'from-them');
+  div.textContent = message;
+  messagesDiv.appendChild(div);
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+function sendMessage() {
+  const message = document.getElementById('msgInput').value;
+  if(!message || !currentChat) return;
+  ws.send(JSON.stringify({ type:'message', from: username, to: currentChat, message }));
+  addMessage(username, message, true);
   document.getElementById('msgInput').value='';
 }
 </script>
