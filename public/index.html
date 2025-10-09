@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Мессенджер</title>
+<style>
+  body { font-family: Arial; }
+  #register, #login, #chat { margin: 20px; }
+  #chat { display: none; }
+  #messages { height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 5px; margin-bottom: 5px; }
+</style>
+</head>
+<body>
+
+<div id="register">
+  <h2>Регистрация</h2>
+  <input id="regUser" placeholder="Логин">
+  <input id="regPass" type="password" placeholder="Пароль">
+  <button onclick="register()">Зарегистрироваться</button>
+</div>
+
+<div id="login" style="display:none">
+  <h2>Вход</h2>
+  <input id="loginUser" placeholder="Логин">
+  <input id="loginPass" type="password" placeholder="Пароль">
+  <button onclick="login()">Войти</button>
+</div>
+
+<div id="chat">
+  <h2>Чат</h2>
+  <input id="toUser" placeholder="Кому">
+  <div id="messages"></div>
+  <input id="msgInput" placeholder="Сообщение">
+  <button onclick="sendMessage()">Отправить</button>
+</div>
+
+<script>
+let ws;
+let username;
+
+function register() {
+  fetch('/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: document.getElementById('regUser').value, password: document.getElementById('regPass').value })
+  }).then(r => r.json()).then(res => {
+    if(res.success) {
+      alert('Зарегистрированы');
+      document.getElementById('register').style.display='none';
+      document.getElementById('login').style.display='block';
+    } else {
+      alert(res.error);
+    }
+  });
+}
+
+function login() {
+  fetch('/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: document.getElementById('loginUser').value, password: document.getElementById('loginPass').value })
+  }).then(r => r.json()).then(res => {
+    if(res.success) {
+      username = res.username;
+      document.getElementById('login').style.display='none';
+      document.getElementById('chat').style.display='block';
+      ws = new WebSocket(`wss://${location.host}`);
+      ws.onopen = () => ws.send(JSON.stringify({ type:'login', username }));
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        const div = document.createElement('div');
+        div.textContent = `${data.from}: ${data.message}`;
+        document.getElementById('messages').appendChild(div);
+      };
+    } else {
+      alert(res.error);
+    }
+  });
+}
+
+function sendMessage() {
+  const to = document.getElementById('toUser').value;
+  const message = document.getElementById('msgInput').value;
+  ws.send(JSON.stringify({ type:'message', from: username, to, message }));
+  const div = document.createElement('div');
+  div.textContent = `Я: ${message}`;
+  document.getElementById('messages').appendChild(div);
+  document.getElementById('msgInput').value='';
+}
+</script>
+
+</body>
+</html>
